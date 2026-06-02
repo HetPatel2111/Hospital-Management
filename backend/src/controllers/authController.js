@@ -22,12 +22,25 @@ export const login = asyncHandler(async (req, res) => {
 });
 
 export const logout = asyncHandler(async (req, res) => {
-  const result = await authService.logout();
+  const result = await authService.logout({
+    user: req.user,
+    refreshToken: req.validated.body.refreshToken
+  });
 
   res.status(200).json({
     success: true,
     data: {},
     message: result.message
+  });
+});
+
+export const refresh = asyncHandler(async (req, res) => {
+  const result = await authService.refreshToken(req.validated.body);
+
+  res.status(200).json({
+    success: true,
+    data: result,
+    message: "Token refreshed successfully"
   });
 });
 

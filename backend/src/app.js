@@ -5,6 +5,8 @@ import rateLimiter from "./middlewares/rateLimiter.js";
 import errorMiddleware from "./middlewares/errorMiddleware.js";
 import AppError from "./utils/AppError.js";
 import authRoutes from "./routes/authRoutes.js";
+import doctorRoutes from "./routes/doctorRoutes.js";
+import adminDoctorRoutes from "./routes/adminDoctorRoutes.js";
 
 const app = express();
 
@@ -27,6 +29,8 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/doctors", doctorRoutes);
+app.use("/api/v1/admin/doctors", adminDoctorRoutes);
 
 app.use((req, res, next) => {
   next(new AppError("Route not found", 404, "ROUTE_NOT_FOUND"));

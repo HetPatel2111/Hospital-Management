@@ -28,6 +28,22 @@ const authMiddleware = async (req, res, next) => {
       return next(new AppError("User account is suspended", 403, "ACCOUNT_SUSPENDED"));
     }
 
+    if (user.status === "pending") {
+      return next(new AppError("User account is pending approval", 403, "ACCOUNT_PENDING"));
+    }
+
+    if (user.status !== "active") {
+      return next(new AppError("User account is not active", 403, "ACCOUNT_NOT_ACTIVE"));
+    }
+
+    if (
+      user.passwordChangedAt &&
+      decoded.iat &&
+      decoded.iat * 1000 < user.passwordChangedAt.getTime()
+    ) {
+      return next(new AppError("Authentication token is no longer valid", 401, "TOKEN_STALE"));
+    }
+
     req.user = user;
     return next();
   } catch (error) {

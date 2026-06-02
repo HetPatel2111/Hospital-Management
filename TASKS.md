@@ -128,6 +128,18 @@
 - Add medical record access auditing.
 - Add vulnerability scanning in CI.
 
+### Completed Security Hardening Updates
+
+- Removed public admin registration from the auth registration flow.
+- Added automatic pending doctor profile creation during doctor registration.
+- Enforced account status checks for active, pending, and suspended users.
+- Added refresh token issuing, rotation, and logout revocation.
+- Revoked active refresh tokens after password reset.
+- Invalidated access tokens issued before password changes.
+- Added a minimal audit log collection for register, login, logout, password reset, doctor approval, doctor rejection, and account suspension.
+- Fixed doctor approval, rejection, and suspension state consistency.
+- Normalized duplicate key, validation, and cast errors into the standard API error response format.
+
 ## Phase 13 - Testing
 
 - Add unit tests for services.
@@ -138,6 +150,11 @@
 - Add RAG indexing tests.
 - Add chatbot permission tests.
 - Add frontend component and flow tests.
+
+### Completed Testing Updates
+
+- Added Vitest and Supertest.
+- Added tests for registration validation, public admin registration rejection, doctor registration validation, login, RBAC, refresh token rotation, and doctor profile creation during registration.
 
 ## Phase 14 - Deployment
 
@@ -167,4 +184,3 @@
 - Monitoring and alerts are configured.
 - Backups are configured for MongoDB Atlas.
 - Deployment environments are isolated.
-
