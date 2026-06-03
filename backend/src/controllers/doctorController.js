@@ -2,7 +2,7 @@ import * as doctorService from "../services/doctorService.js";
 import asyncHandler from "../utils/asyncHandler.js";
 
 export const listDoctors = asyncHandler(async (req, res) => {
-  const result = await doctorService.listDoctors(req.validated.query);
+  const result = await doctorService.listDoctors(req.validated.query, req.user);
 
   res.status(200).json({
     success: true,
@@ -12,7 +12,7 @@ export const listDoctors = asyncHandler(async (req, res) => {
 });
 
 export const getDoctorById = asyncHandler(async (req, res) => {
-  const result = await doctorService.getDoctorById(req.validated.params.id);
+  const result = await doctorService.getDoctorById(req.validated.params.id, req.user);
 
   res.status(200).json({
     success: true,
@@ -123,3 +123,58 @@ export const deactivateDoctor = asyncHandler(async (req, res) => {
     message: "Doctor deactivated successfully"
   });
 });
+
+export const getMyAppointments = asyncHandler(async (req, res) => {
+  const result = await doctorService.getMyAppointments(req.user._id, req.validated.query);
+
+  res.status(200).json({
+    success: true,
+    data: result,
+    message: "Appointments fetched successfully"
+  });
+});
+
+export const getMyPatientById = asyncHandler(async (req, res) => {
+  const result = await doctorService.getMyPatientById(req.user._id, req.validated.params.patientId);
+
+  res.status(200).json({
+    success: true,
+    data: result,
+    message: "Patient details fetched successfully"
+  });
+});
+
+export const createPrescription = asyncHandler(async (req, res) => {
+  const result = await doctorService.createPrescription(req.user._id, req.validated.body);
+
+  res.status(201).json({
+    success: true,
+    data: result,
+    message: "Prescription created successfully"
+  });
+});
+
+export const getMyAvailability = asyncHandler(async (req, res) => {
+  const result = await doctorService.getMyAvailability(req.user._id);
+
+  res.status(200).json({
+    success: true,
+    data: result,
+    message: "Doctor availability fetched successfully"
+  });
+});
+
+export const getDoctorAvailabilityForDate = asyncHandler(async (req, res) => {
+  const result = await doctorService.getDoctorAvailabilityForDate(
+    req.validated.params.id,
+    req.validated.query.date
+  );
+
+  res.status(200).json({
+    success: true,
+    data: result,
+    message: "Doctor availability lookup completed successfully"
+  });
+});
+
+

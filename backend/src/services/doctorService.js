@@ -2,6 +2,10 @@ import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import Doctor from "../models/Doctor.js";
 import User from "../models/User.js";
+import Appointment from "../models/Appointment.js";
+import Patient from "../models/Patient.js";
+import Prescription from "../models/Prescription.js";
+import Notification from "../models/Notification.js";
 import { AUDIT_ACTIONS, createAuditLog } from "./auditService.js";
 import AppError from "../utils/AppError.js";
 
@@ -83,7 +87,7 @@ const getDoctorByIdOrThrow = async (id) => {
   return doctor;
 };
 
-export const listDoctors = async (query) => {
+export const listDoctors = async (query, actor = null) => {
   const filters = buildDoctorFilters(query, true);
   const skip = (query.page - 1) * query.limit;
   const sort = { [query.sortBy]: query.sortOrder === "asc" ? 1 : -1 };
@@ -92,6 +96,15 @@ export const listDoctors = async (query) => {
     Doctor.find(filters).populate(doctorPopulate).sort(sort).skip(skip).limit(query.limit),
     Doctor.countDocuments(filters)
   ]);
+
+  if (actor) {
+    await createAuditLog({
+      ...getActor(actor),
+      action: AUDIT_ACTIONS.DOCTOR_DISCOVERY_VIEW,
+      resourceType: "doctors",
+      resourceId: null
+    });
+  }
 
   return {
     doctors: doctors.map(toDoctorResponse),
@@ -104,11 +117,20 @@ export const listDoctors = async (query) => {
   };
 };
 
-export const getDoctorById = async (id) => {
+export const getDoctorById = async (id, actor = null) => {
   const doctor = await getDoctorByIdOrThrow(id);
 
   if (doctor.status !== "approved") {
     throw new AppError("Doctor not found", 404, "DOCTOR_NOT_FOUND");
+  }
+
+  if (actor) {
+    await createAuditLog({
+      ...getActor(actor),
+      action: AUDIT_ACTIONS.DOCTOR_PROFILE_VIEW,
+      resourceType: "doctors",
+      resourceId: doctor._id
+    });
   }
 
   return {
@@ -367,3 +389,270 @@ export const deactivateDoctor = async (id, actor = null) => {
     doctor: toDoctorResponse(updatedDoctor)
   };
 };
+
+const toDoctorAppointmentResponse = (appointment) => {
+  const plain = appointment.toObject ? appointment.toObject({ virtuals: true }) : appointment;
+  const patient = plain.patientId;
+
+  return {
+    id: plain._id,
+    appointmentDate: plain.appointmentDate,
+    startTime: plain.startTime,
+    endTime: plain.endTime,
+    status: plain.status,
+    reason: plain.reason,
+    notes: plain.notes,
+    cancellation: plain.cancellation,
+    paymentId: plain.paymentId,
+    patient: patient
+      ? {
+          id: patient._id,
+          fullName: patient.userId?.name,
+          email: patient.userId?.email,
+          phone: patient.userId?.phone,
+          dateOfBirth: patient.dateOfBirth,
+          gender: patient.gender,
+          bloodGroup: patient.bloodGroup
+        }
+      : null,
+    createdAt: plain.createdAt,
+    updatedAt: plain.updatedAt
+  };
+};
+
+const toPatientDetailsResponse = (patient) => {
+  const plain = patient.toObject ? patient.toObject() : patient;
+
+  return {
+    id: plain._id,
+    userId: plain.userId?._id || plain.userId,
+    name: plain.userId?.name,
+    email: plain.userId?.email,
+    phone: plain.userId?.phone,
+    dateOfBirth: plain.dateOfBirth,
+    gender: plain.gender,
+    bloodGroup: plain.bloodGroup,
+    address: plain.address,
+    emergencyContact: plain.emergencyContact,
+    medicalHistory: plain.medicalHistory,
+    allergies: plain.allergies,
+    currentMedications: plain.currentMedications,
+    insuranceDetails: plain.insuranceDetails,
+    createdAt: plain.createdAt,
+    updatedAt: plain.updatedAt
+  };
+};
+
+export const getMyAppointments = async (userId, query) => {
+  const doctor = await Doctor.findOne({ userId });
+  if (!doctor) {
+    throw new AppError("Doctor profile not found", 404, "DOCTOR_PROFILE_NOT_FOUND");
+  }
+
+  const filters = { doctorId: doctor._id };
+
+  if (query.status) {
+    filters.status = query.status;
+  }
+
+  if (query.startDate || query.endDate) {
+    filters.appointmentDate = {};
+    if (query.startDate) {
+      filters.appointmentDate.$gte = new Date(query.startDate);
+    }
+    if (query.endDate) {
+      filters.appointmentDate.$lte = new Date(query.endDate);
+    }
+  }
+
+  const skip = (query.page - 1) * query.limit;
+  const sort = { appointmentDate: query.sortOrder === "asc" ? 1 : -1, startTime: 1 };
+
+  const [appointments, total] = await Promise.all([
+    Appointment.find(filters)
+      .populate({
+        path: "patientId",
+        populate: {
+          path: "userId",
+          select: "name email phone"
+        }
+      })
+      .sort(sort)
+      .skip(skip)
+      .limit(query.limit),
+    Appointment.countDocuments(filters)
+  ]);
+
+  await createAuditLog({
+    actorId: userId,
+    actorRole: "doctor",
+    action: AUDIT_ACTIONS.DOCTOR_APPOINTMENTS_VIEW,
+    resourceType: "doctors",
+    resourceId: doctor._id
+  });
+
+  return {
+    appointments: appointments.map(toDoctorAppointmentResponse),
+    pagination: {
+      page: query.page,
+      limit: query.limit,
+      total,
+      totalPages: Math.ceil(total / query.limit)
+    }
+  };
+};
+
+export const getMyPatientById = async (userId, patientId) => {
+  const doctor = await Doctor.findOne({ userId });
+  if (!doctor) {
+    throw new AppError("Doctor profile not found", 404, "DOCTOR_PROFILE_NOT_FOUND");
+  }
+
+  const hasAppointment = await Appointment.exists({ doctorId: doctor._id, patientId });
+  if (!hasAppointment) {
+    throw new AppError("Patient not assigned to this doctor", 403, "PATIENT_NOT_ASSIGNED");
+  }
+
+  const patient = await Patient.findById(patientId).populate({
+    path: "userId",
+    select: "name email phone"
+  });
+
+  if (!patient) {
+    throw new AppError("Patient not found", 404, "PATIENT_NOT_FOUND");
+  }
+
+  await createAuditLog({
+    actorId: userId,
+    actorRole: "doctor",
+    action: AUDIT_ACTIONS.DOCTOR_PATIENT_VIEW,
+    resourceType: "patients",
+    resourceId: patient._id
+  });
+
+  return {
+    patient: toPatientDetailsResponse(patient)
+  };
+};
+
+export const createPrescription = async (userId, payload) => {
+  const doctor = await Doctor.findOne({ userId }).populate(doctorPopulate);
+  if (!doctor) {
+    throw new AppError("Doctor profile not found", 404, "DOCTOR_PROFILE_NOT_FOUND");
+  }
+
+  const appointment = await Appointment.findById(payload.appointmentId);
+  if (!appointment) {
+    throw new AppError("Appointment not found", 404, "APPOINTMENT_NOT_FOUND");
+  }
+
+  if (appointment.doctorId.toString() !== doctor._id.toString()) {
+    throw new AppError("You do not have permission to prescribe for this appointment", 403, "FORBIDDEN");
+  }
+
+  if (!["confirmed", "completed"].includes(appointment.status)) {
+    throw new AppError("Prescriptions can only be created for confirmed or completed appointments", 400, "INVALID_APPOINTMENT_STATUS");
+  }
+
+  const existingPrescription = await Prescription.findOne({ appointmentId: appointment._id });
+  if (existingPrescription) {
+    throw new AppError("A prescription already exists for this appointment", 409, "PRESCRIPTION_ALREADY_EXISTS");
+  }
+
+  const prescription = await Prescription.create({
+    appointmentId: appointment._id,
+    diagnosis: payload.diagnosis,
+    medicines: payload.medicines,
+    instructions: payload.instructions,
+    followUpDate: payload.followUpDate
+  });
+
+  await appointment.populate("patientId");
+  const patientUserId = appointment.patientId?.userId;
+
+  if (patientUserId) {
+    await Notification.create({
+      userId: patientUserId,
+      type: "prescription",
+      title: "New Prescription Added",
+      message: `A new prescription has been added by Dr. ${doctor.userId?.name || "assigned doctor"} for your appointment.`
+    });
+  }
+
+  await createAuditLog({
+    actorId: userId,
+    actorRole: "doctor",
+    action: AUDIT_ACTIONS.PRESCRIPTION_CREATE,
+    resourceType: "prescriptions",
+    resourceId: prescription._id
+  });
+
+  return {
+    prescription
+  };
+};
+
+export const getMyAvailability = async (userId) => {
+  const doctor = await Doctor.findOne({ userId });
+  if (!doctor) {
+    throw new AppError("Doctor profile not found", 404, "DOCTOR_PROFILE_NOT_FOUND");
+  }
+
+  return {
+    availability: doctor.availability
+  };
+};
+
+export const getDoctorAvailabilityForDate = async (doctorId, dateStr) => {
+  const doctor = await Doctor.findById(doctorId).populate(doctorPopulate);
+  if (!doctor) {
+    throw new AppError("Doctor not found", 404, "DOCTOR_NOT_FOUND");
+  }
+
+  const date = new Date(dateStr);
+  const appointmentDay = date.getDay();
+  const appointmentDateStr = date.toISOString().split("T")[0];
+
+  // 1. Check Exceptions first
+  const exception = doctor.availability?.exceptions?.find((e) => {
+    const exceptionDateStr = new Date(e.date).toISOString().split("T")[0];
+    return exceptionDateStr === appointmentDateStr;
+  });
+
+  if (exception && !exception.isAvailable) {
+    return { slots: [] };
+  }
+
+  // 2. Check Weekly Schedule
+  const daySchedule = doctor.availability?.weeklySchedule?.find(
+    (d) => d.dayOfWeek === appointmentDay
+  );
+
+  if (!daySchedule || !daySchedule.isAvailable || !daySchedule.slots?.length) {
+    return { slots: [] };
+  }
+
+  // 3. Fetch Bookings for that day
+  const bookings = await Appointment.find({
+    doctorId: doctor._id,
+    appointmentDate: date,
+    status: { $in: ["pending", "confirmed", "completed"] }
+  });
+
+  // 4. Map weekly schedule slots and check overlaps
+  const slots = daySchedule.slots.map((slot) => {
+    const isBooked = bookings.some(
+      (booking) => slot.startTime < booking.endTime && slot.endTime > booking.startTime
+    );
+
+    return {
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      available: !isBooked
+    };
+  });
+
+  return { slots };
+};
+
+

@@ -3,6 +3,7 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import Doctor from "../models/Doctor.js";
+import Patient from "../models/Patient.js";
 import RefreshToken from "../models/RefreshToken.js";
 import User from "../models/User.js";
 import { AUDIT_ACTIONS, createAuditLog } from "./auditService.js";
@@ -142,6 +143,23 @@ const toDoctorResponse = (doctor) => ({
   updatedAt: doctor.updatedAt
 });
 
+const toPatientResponse = (patient) => ({
+  id: patient._id,
+  userId: patient.userId,
+  profilePictureUrl: patient.profilePictureUrl,
+  dateOfBirth: patient.dateOfBirth,
+  gender: patient.gender,
+  bloodGroup: patient.bloodGroup,
+  address: patient.address,
+  emergencyContact: patient.emergencyContact,
+  medicalHistory: patient.medicalHistory,
+  allergies: patient.allergies,
+  currentMedications: patient.currentMedications,
+  insuranceDetails: patient.insuranceDetails,
+  createdAt: patient.createdAt,
+  updatedAt: patient.updatedAt
+});
+
 export const register = async ({
   name,
   email,
@@ -179,6 +197,7 @@ export const register = async ({
   try {
     let user;
     let doctor;
+    let patient;
 
     await session.withTransaction(async () => {
       [user] = await User.create(
@@ -212,6 +231,15 @@ export const register = async ({
           ],
           { session }
         );
+      } else {
+        [patient] = await Patient.create(
+          [
+            {
+              userId: user._id
+            }
+          ],
+          { session }
+        );
       }
     });
 
@@ -230,6 +258,7 @@ export const register = async ({
     if (doctor) {
       response.doctor = toDoctorResponse(doctor);
     } else {
+      response.patient = toPatientResponse(patient);
       const tokens = await issueTokenPair(user);
       response.accessToken = tokens.accessToken;
       response.refreshToken = tokens.refreshToken;

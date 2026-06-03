@@ -6,9 +6,29 @@ const session = {
   endSession: vi.fn()
 };
 
+const SchemaMock = function () {
+  return {
+    index: vi.fn(),
+    set: vi.fn(),
+    virtual: vi.fn(() => ({ get: vi.fn() }))
+  };
+};
+SchemaMock.Types = {
+  ObjectId: vi.fn()
+};
+
 vi.mock("mongoose", () => ({
   default: {
-    startSession: vi.fn(async () => session)
+    startSession: vi.fn(async () => session),
+    Schema: SchemaMock,
+    model: vi.fn(() => ({
+      index: vi.fn()
+    })),
+    Types: {
+      ObjectId: {
+        isValid: vi.fn(() => true)
+      }
+    }
   }
 }));
 

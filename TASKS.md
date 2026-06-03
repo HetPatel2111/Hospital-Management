@@ -32,6 +32,19 @@
 - Build patient refund history.
 - Build patient dashboard summary.
 
+### Completed Patient Portal Updates
+
+- Added patient profile view and update APIs.
+- Added profile picture URL update API.
+- Added patient dashboard summary API.
+- Added patient notifications API with pagination and filters.
+- Added appointment history, upcoming, completed, and cancelled read-only APIs.
+- Added patient, appointment, and notification models.
+- Added patient validation schemas, controller, service, and routes.
+- Added audit logging for patient portal reads and updates.
+- Reused protected doctor discovery APIs with search, pagination, specialization, experience, and fee filters.
+- Appointment booking was intentionally not implemented in this phase.
+
 ## Phase 4 - Doctor Portal
 
 - Build doctor profile management.
@@ -41,6 +54,19 @@
 - Build prescription creation.
 - Build appointment completion flow.
 - Build doctor dashboard analytics.
+
+### Completed Doctor Portal Updates
+
+- Added doctor profile endpoints (GET /me, PATCH /me).
+- Added doctor availability endpoints (GET /me/availability, PUT /me/availability, PATCH /me/availability).
+- Added doctor appointment schedule API (GET /me/appointments).
+- Added patient detail view for assigned patients API (GET /me/patients/:patientId), verifying assignment through active/completed appointment checks.
+- Added Prescription model minimizing duplicate data and deriving patient/doctor relationships through appointments.
+- Added prescription creation API (POST /me/prescriptions) checking status and avoiding duplicates.
+- Added appointment completion flow endpoint (PATCH /appointments/:id/complete) validating doctor assignments.
+- Added doctor dashboard analytics API (GET /analytics/doctor/overview) with revenue calculations delayed until Payment Module exists.
+- Added unit and integration tests under tests/doctorPortal.test.js with 100% test coverage for the services.
+
 
 ## Phase 5 - Admin Portal
 
@@ -63,6 +89,18 @@
 - Confirm appointment only after verified payment.
 - Add cancellation and rescheduling rules.
 - Add appointment reminders through background jobs.
+
+### Completed Appointment Booking Updates
+
+- Added availability lookup endpoint (`GET /api/v1/doctors/:id/availability-lookup`) checking weekday schedule slots and date exceptions.
+- Added slot reservation check by checking overlaps with pending, confirmed, or completed appointments.
+- Prevented double booking by enforcing database unique compound index and conducting interval-based overlap searches in the service layer.
+- Added pending appointment creation, reserving the slot for the patient.
+- Provided status confirmation endpoints (`PATCH /confirm`) accessible by the doctor or administrator.
+- Added cancellation rules (`PATCH /cancel`) and rescheduling rules (`PATCH /reschedule`) validating doctor availability and overlap checking.
+- Implemented appointment reminders through a background job (`reminderService.js`) running periodically, which matches confirmed appointments in the next 24 hours and issues singular reminders to patient accounts.
+- Added unit and integration tests covering the booking service, availability validations, reschedule/cancel flows, and reminder checks.
+
 
 ## Phase 7 - Razorpay Payments
 

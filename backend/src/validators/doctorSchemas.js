@@ -141,3 +141,36 @@ export const updateAvailabilitySchema = z.object({
   params: z.object({}).optional(),
   query: z.object({}).optional()
 });
+
+export const listDoctorAppointmentsSchema = z.object({
+  body: z.object({}).optional(),
+  params: z.object({}).optional(),
+  query: z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(10),
+    status: z.enum(["pending", "confirmed", "completed", "cancelled", "refunded", "no_show"]).optional(),
+    startDate: z.coerce.date().optional(),
+    endDate: z.coerce.date().optional(),
+    sortOrder: z.enum(["asc", "desc"]).default("desc")
+  })
+});
+
+export const patientIdParamSchema = z.object({
+  body: z.object({}).optional(),
+  params: z.object({
+    patientId: objectId
+  }),
+  query: z.object({}).optional()
+});
+
+export const availabilityLookupSchema = z.object({
+  body: z.object({}).optional(),
+  params: z.object({
+    id: objectId
+  }),
+  query: z.object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must use YYYY-MM-DD format")
+  })
+});
+
+
