@@ -248,7 +248,7 @@ export default function PatientAppointments() {
   });
 
   // 3. Fetch doctor availability slots (based on selected doctor & date)
-  const targetDoctorId = bookingDoctor?._id || reschedulingAppt?.doctor?.id;
+  const targetDoctorId = bookingDoctor?.id || reschedulingAppt?.doctor?.id;
   const { data: availabilityData, isLoading: slotsLoading } = useQuery({
     queryKey: ["availability", targetDoctorId, bookDate],
     queryFn: () => getDoctorAvailability(targetDoctorId, bookDate),
@@ -264,7 +264,7 @@ export default function PatientAppointments() {
   useEffect(() => {
     const doctorId = searchParams.get("doctorId");
     if (doctorId && doctorsList.length > 0) {
-      const doc = doctorsList.find((d) => d._id === doctorId);
+      const doc = doctorsList.find((d) => d.id === doctorId);
       if (doc) {
         setBookingDoctor(doc);
         setActiveTab("directory");
@@ -327,7 +327,7 @@ export default function PatientAppointments() {
     setBookingError("");
 
     const payload = {
-      doctorId: bookingDoctor._id,
+      doctorId: bookingDoctor.id,
       appointmentDate: bookDate,
       startTime: bookSlot.startTime,
       endTime: bookSlot.endTime,
@@ -572,7 +572,7 @@ export default function PatientAppointments() {
               </div>
             ) : (
               doctorsList.map((doc) => (
-                <div key={doc._id} className={`p-5 ${THEME.glass.card} flex flex-col justify-between gap-5 text-left`}>
+                <div key={doc.id} className={`p-5 ${THEME.glass.card} flex flex-col justify-between gap-5 text-left`}>
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center font-bold text-lg flex-shrink-0">
                       {doc.fullName?.charAt(0).toUpperCase() || "D"}
@@ -591,7 +591,7 @@ export default function PatientAppointments() {
                     </div>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => navigate(`/patient/doctors/${doc._id}`)}
+                        onClick={() => navigate(`/patient/doctors/${doc.id}`)}
                         className="text-xs font-semibold px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 transition-colors"
                       >
                         Profile
@@ -683,7 +683,7 @@ export default function PatientAppointments() {
                 {/* 7-Day Quick Selector */}
                 <div className="flex gap-2 overflow-x-auto pb-2 mb-3 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                   {getNext7Days(
-                    doctorsList.find(d => d._id === (reschedulingAppt?.doctor?.id || reschedulingAppt?.doctorId)) || reschedulingAppt?.doctor
+                    doctorsList.find(d => d.id === (reschedulingAppt?.doctor?.id || reschedulingAppt?.doctorId)) || reschedulingAppt?.doctor
                   ).map((day, idx) => {
                     const isSelected = bookDate === day.dateStr;
                     return (

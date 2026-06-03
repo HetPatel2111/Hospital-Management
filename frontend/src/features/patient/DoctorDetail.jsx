@@ -26,7 +26,7 @@ export default function DoctorDetail() {
 
   const handleBookAppointment = () => {
     // Redirect to appointments page with doctorId query parameter
-    navigate(`${ROUTES.PATIENT_APPOINTMENTS}?doctorId=${doctor._id}`);
+    navigate(`${ROUTES.PATIENT_APPOINTMENTS}?doctorId=${doctor.id}`);
   };
 
   if (isLoading) {
