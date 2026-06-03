@@ -160,6 +160,30 @@ export const listDoctors = async (query, actor = null) => {
   };
 };
 
+export const listDoctorsAdmin = async (query) => {
+  const filters = await buildDoctorFilters(query, false);
+  if (query.status) {
+    filters.status = query.status;
+  }
+  const skip = (query.page - 1) * query.limit;
+  const sort = { [query.sortBy]: query.sortOrder === "asc" ? 1 : -1 };
+
+  const [doctors, total] = await Promise.all([
+    Doctor.find(filters).populate(doctorPopulate).sort(sort).skip(skip).limit(query.limit),
+    Doctor.countDocuments(filters)
+  ]);
+
+  return {
+    doctors: doctors.map(toDoctorResponse),
+    pagination: {
+      page: query.page,
+      limit: query.limit,
+      total,
+      totalPages: Math.ceil(total / query.limit)
+    }
+  };
+};
+
 export const getDoctorById = async (id, actor = null) => {
   const doctor = await getDoctorByIdOrThrow(id);
 

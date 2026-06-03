@@ -18,7 +18,22 @@ import PatientAppointments from "../features/patient/PatientAppointments.jsx";
 import DoctorDetail from "../features/patient/DoctorDetail.jsx";
 import PatientPayments from "../features/patient/PatientPayments.jsx";
 import PatientRefunds from "../features/patient/PatientRefunds.jsx";
+
+// Import Admin Portal Pages
+import AdminDashboard from "../features/admin/AdminDashboard.jsx";
+import AdminDoctors from "../features/admin/AdminDoctors.jsx";
+import AdminPatients from "../features/admin/AdminPatients.jsx";
+import AdminAppointments from "../features/admin/AdminAppointments.jsx";
+import AdminPayments from "../features/admin/AdminPayments.jsx";
 import AdminRefunds from "../features/admin/AdminRefunds.jsx";
+
+// Import Doctor Portal Pages
+import DoctorDashboard from "../features/doctor/DoctorDashboard.jsx";
+import DoctorAppointments from "../features/doctor/DoctorAppointments.jsx";
+import DoctorAvailability from "../features/doctor/DoctorAvailability.jsx";
+import DoctorProfile from "../features/doctor/DoctorProfile.jsx";
+import DoctorPatients from "../features/doctor/DoctorPatients.jsx";
+import DoctorPatientDetails from "../features/doctor/DoctorPatientDetails.jsx";
 
 // General Placeholder Component for Dashboard pages (to avoid creating final pages in this phase)
 const DashboardPlaceholder = ({ title, description }) => (
@@ -76,23 +91,23 @@ export default function AppRoutes() {
         {/* Doctor Dashboard Module Routes */}
         <Route element={<RoleRoute allowedRoles={["doctor"]} />}>
           <Route element={<DashboardLayout />}>
-            <Route path={ROUTES.DOCTOR_DASHBOARD} element={<DashboardPlaceholder title="Doctor Dashboard" description="Check today's patient queue, total workload metrics, and availability reminders." />} />
-            <Route path={ROUTES.DOCTOR_PROFILE} element={<DashboardPlaceholder title="Doctor Profile Settings" description="Edit consultation fees, academic qualifications, and profile biography." />} />
-            <Route path={ROUTES.DOCTOR_AVAILABILITY} element={<DashboardPlaceholder title="Doctor Shift Availability" description="Configure weekly schedules, active hours, and holiday exceptions." />} />
-            <Route path={ROUTES.DOCTOR_APPOINTMENTS} element={<DashboardPlaceholder title="Doctor Appointments Queue" description="Confirm incoming requests, start patient consults, or mark appointments as completed." />} />
-            <Route path={ROUTES.DOCTOR_PATIENTS} element={<DashboardPlaceholder title="Doctor Patients Database" description="View past histories, treatments, and medical records of assigned patients." />} />
-            <Route path={ROUTES.DOCTOR_PATIENT_DETAILS} element={<DashboardPlaceholder title="Patient Profile Timeline" />} />
+            <Route path={ROUTES.DOCTOR_DASHBOARD} element={<DoctorDashboard />} />
+            <Route path={ROUTES.DOCTOR_PROFILE} element={<DoctorProfile />} />
+            <Route path={ROUTES.DOCTOR_AVAILABILITY} element={<DoctorAvailability />} />
+            <Route path={ROUTES.DOCTOR_APPOINTMENTS} element={<DoctorAppointments />} />
+            <Route path={ROUTES.DOCTOR_PATIENTS} element={<DoctorPatients />} />
+            <Route path={ROUTES.DOCTOR_PATIENT_DETAILS} element={<DoctorPatientDetails />} />
           </Route>
         </Route>
 
         {/* Admin Dashboard Module Routes */}
         <Route element={<RoleRoute allowedRoles={["admin"]} />}>
           <Route element={<DashboardLayout />}>
-            <Route path={ROUTES.ADMIN_DASHBOARD} element={<DashboardPlaceholder title="Admin System Overview" description="Aggregate hospital KPIs, active doctor ratios, and server health charts." />} />
-            <Route path={ROUTES.ADMIN_USERS} element={<DashboardPlaceholder title="User Account Control" description="Verify user statuses, toggle account suspensions, or update credentials." />} />
-            <Route path={ROUTES.ADMIN_DOCTORS} element={<DashboardPlaceholder title="Doctor Registration Approvals" description="Review certificates, approve new practitioner requests, and list registered doctors." />} />
-            <Route path={ROUTES.ADMIN_APPOINTMENTS} element={<DashboardPlaceholder title="All Appointments Ledger" description="Monitor scheduling distributions, force cancellations, or change statuses." />} />
-            <Route path={ROUTES.ADMIN_PAYMENTS} element={<DashboardPlaceholder title="All Payments Ledger" description="Track transactions, view total revenue collections, and manage billing entries." />} />
+            <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboard />} />
+            <Route path={ROUTES.ADMIN_USERS} element={<AdminPatients />} />
+            <Route path={ROUTES.ADMIN_DOCTORS} element={<AdminDoctors />} />
+            <Route path={ROUTES.ADMIN_APPOINTMENTS} element={<AdminAppointments />} />
+            <Route path={ROUTES.ADMIN_PAYMENTS} element={<AdminPayments />} />
             <Route path={ROUTES.ADMIN_REFUNDS} element={<AdminRefunds />} />
             <Route path={ROUTES.ADMIN_AUDIT_LOGS} element={<DashboardPlaceholder title="Security Audit Logs" description="Review user session traces, database edits, and access histories." />} />
             <Route path={ROUTES.ADMIN_RAG} element={<DashboardPlaceholder title="AI RAG Knowledge Base" description="Upload document files to update the AI chatbot's vector dataset storage." />} />

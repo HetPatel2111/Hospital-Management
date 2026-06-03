@@ -57,6 +57,7 @@ export const listDoctorsSchema = z.object({
     maxExperience: z.coerce.number().int().min(0).optional(),
     minFee: z.coerce.number().min(0).optional(),
     maxFee: z.coerce.number().min(0).optional(),
+    status: z.enum(["pending", "approved", "rejected"]).optional(),
     sortBy: z
       .enum(["createdAt", "experienceYears", "consultationFee", "specialization"])
       .default("createdAt"),
