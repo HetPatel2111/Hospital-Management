@@ -25,8 +25,8 @@ export default function AdminPayments() {
     queryFn: getOverviewKPIs
   });
 
-  const paymentsList = paymentsData?.data?.payments || [];
-  const pagination = paymentsData?.data?.pagination || { total: 0, totalPages: 1 };
+  const paymentsList = paymentsData?.data || [];
+  const pagination = paymentsData?.pagination || { total: 0, totalPages: 1 };
   const revenueTotal = kpisData?.data?.totalRevenue || 0;
   const refundsTotal = kpisData?.data?.totalRefunds || 0;
 

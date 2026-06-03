@@ -139,3 +139,12 @@ export const getAllPayments = async (params = {}) => {
   const response = await api.get("/admin/payments", { params });
   return response.data;
 };
+
+/**
+ * Register a new doctor from the admin control panel
+ * @param {object} payload - doctor profile details
+ */
+export const createDoctorAdmin = async (payload) => {
+  const response = await api.post("/admin/doctors", payload);
+  return response.data;
+};

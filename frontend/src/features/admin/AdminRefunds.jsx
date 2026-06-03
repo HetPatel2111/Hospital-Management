@@ -21,7 +21,13 @@ export default function AdminRefunds() {
   // Fetch admin refunds
   const { data, isLoading, error } = useQuery({
     queryKey: ["adminRefunds", { page: currentPage, status: statusFilter }],
-    queryFn: () => getAdminRefunds({ page: currentPage, limit: 8, status: statusFilter })
+    queryFn: () => {
+      const params = { page: currentPage, limit: 8 };
+      if (statusFilter) {
+        params.status = statusFilter;
+      }
+      return getAdminRefunds(params);
+    }
   });
 
   const refundsList = data?.data || [];
