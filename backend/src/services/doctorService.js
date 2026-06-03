@@ -455,7 +455,13 @@ const toDoctorAppointmentResponse = (appointment) => {
           phone: patient.userId?.phone,
           dateOfBirth: patient.dateOfBirth,
           gender: patient.gender,
-          bloodGroup: patient.bloodGroup
+          bloodGroup: patient.bloodGroup,
+          address: patient.address,
+          emergencyContact: patient.emergencyContact,
+          medicalHistory: patient.medicalHistory,
+          allergies: patient.allergies,
+          currentMedications: patient.currentMedications,
+          insuranceDetails: patient.insuranceDetails
         }
       : null,
     createdAt: plain.createdAt,
@@ -496,6 +502,9 @@ export const getMyAppointments = async (userId, query) => {
 
   if (query.status) {
     filters.status = query.status;
+  } else {
+    // Exclude pending_payment by default for the doctor (not booked/paid yet)
+    filters.status = { $ne: "pending_payment" };
   }
 
   if (query.startDate || query.endDate) {

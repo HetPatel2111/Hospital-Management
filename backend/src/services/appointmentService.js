@@ -41,7 +41,13 @@ const toAppointmentResponse = (appointment) => {
           phone: patient.userId?.phone,
           dateOfBirth: patient.dateOfBirth,
           gender: patient.gender,
-          bloodGroup: patient.bloodGroup
+          bloodGroup: patient.bloodGroup,
+          address: patient.address,
+          emergencyContact: patient.emergencyContact,
+          medicalHistory: patient.medicalHistory,
+          allergies: patient.allergies,
+          currentMedications: patient.currentMedications,
+          insuranceDetails: patient.insuranceDetails
         }
       : null,
     createdAt: plain.createdAt,
