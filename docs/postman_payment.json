@@ -1,0 +1,234 @@
+{
+  "info": {
+    "_postman_id": "7f8c19ea-eb51-4591-9007-1987760b04ad",
+    "name": "Hospital Management System - Payment Integration APIs",
+    "description": "Collection covering all payment endpoints for patients and administrators, including signature verification and order tracking.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Patient Payment Operations",
+      "item": [
+        {
+          "name": "Create Razorpay Order",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appointmentId\": \"64f8c2b7405e3f4e4881ad34\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments/create-order",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "create-order"
+              ]
+            },
+            "description": "Creates a Razorpay order against a pending_payment appointment, matching the doctor consultation fee, and generates a pending payment ledger record in the database."
+          }
+        },
+        {
+          "name": "Verify Payment Signature",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appointmentId\": \"64f8c2b7405e3f4e4881ad34\",\n  \"razorpayOrderId\": \"order_MkJb3B1Mjk1\",\n  \"razorpayPaymentId\": \"pay_MkK5MjE5MzI\",\n  \"razorpaySignature\": \"88970e7e1e695d7f1d4314c46fbe8570c96c429bb77732a39b3a3c2005e830e2\",\n  \"paymentMethod\": \"card\",\n  \"gatewayResponse\": {\n    \"razorpay_order_id\": \"order_MkJb3B1Mjk1\",\n    \"razorpay_payment_id\": \"pay_MkK5MjE5MzI\",\n    \"razorpay_signature\": \"88970e7e1e695d7f1d4314c46fbe8570c96c429bb77732a39b3a3c2005e830e2\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "verify"
+              ]
+            },
+            "description": "Verifies the signature returned by Razorpay Checkout. Uses the backend RAZORPAY_KEY_SECRET to compute HMAC-SHA256, transitions the appointment status to confirmed, and saves full gateway response metadata."
+          }
+        },
+        {
+          "name": "Get My Payments",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/my-payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "my-payments"
+              ]
+            },
+            "description": "Retrieves the historical transaction list for the currently logged-in patient."
+          }
+        },
+        {
+          "name": "Get Payment Details By ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/64f8c2b7405e3f4e4881ad99",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "64f8c2b7405e3f4e4881ad99"
+              ]
+            },
+            "description": "Retrieves comprehensive information for a single transaction. Subject to security access controls (patient must own the booking, or doctor must be the service provider)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Operations",
+      "item": [
+        {
+          "name": "Admin Get All Payments",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/payments?page=1&limit=10&status=success",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "payments"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "success"
+                },
+                {
+                  "key": "refundStatus",
+                  "value": "none",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Fetches a paginated, filterable overview of all transactions in the system for administrative audit logs review."
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "patientAccessToken",
+      "value": "your_patient_jwt_here",
+      "type": "string"
+    },
+    {
+      "key": "adminAccessToken",
+      "value": "your_admin_jwt_here",
+      "type": "string"
+    }
+  ]
+}

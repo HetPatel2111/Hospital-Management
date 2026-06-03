@@ -183,6 +183,8 @@ availability:
   exceptions:
     date: Date
     isAvailable: Boolean
+    startTime: String
+    endTime: String
     reason: String
 status: String enum(pending, approved, rejected)
 bio: String
@@ -236,7 +238,7 @@ doctorId: ObjectId
 appointmentDate: Date
 startTime: String
 endTime: String
-status: String enum(pending, confirmed, completed, cancelled, refunded, no_show)
+status: String enum(pending_payment, payment_completed, pending, confirmed, completed, cancelled, refunded, no_show)
 reason: String
 notes: String
 cancellation:
@@ -294,15 +296,16 @@ Stores Razorpay payment lifecycle and verification state.
 _id: ObjectId
 appointmentId: ObjectId
 patientId: ObjectId
-doctorId: ObjectId
-razorpayOrderId: String
-razorpayPaymentId: String
 amount: Number
-currency: String
-status: String enum(created, paid, failed, refunded, partially_refunded)
-signatureVerified: Boolean
-failureReason: String
-providerPayload: Object
+currency: String (default: "INR")
+razorpayOrderId: String (unique)
+razorpayPaymentId: String (sparse)
+razorpaySignature: String
+paymentStatus: String enum(pending, success, failed, refunded) (default: "pending")
+paymentMethod: String
+paidAt: Date
+refundStatus: String enum(none, requested, processing, refunded) (default: "none")
+gatewayResponse: Mixed
 createdAt: Date
 updatedAt: Date
 ```
@@ -347,16 +350,22 @@ Stores refund requests, approvals, provider processing, and final refund state.
 
 ```text
 _id: ObjectId
-paymentId: ObjectId
 appointmentId: ObjectId
-requestedBy: ObjectId
-reviewedBy: ObjectId
-reason: String
+paymentId: ObjectId
+patientId: ObjectId
 amount: Number
-razorpayRefundId: String
-status: String enum(requested, approved, rejected, processing, completed, failed)
+refundPercentage: Number
+refundAmount: Number
+refundReason: String
+refundStatus: String enum(requested, approved, rejected, processing, refunded) (default: "requested")
+requestedAt: Date (default: now)
+processedAt: Date
+approvedBy: ObjectId (ref: User)
+rejectedBy: ObjectId (ref: User)
 adminRemarks: String
-providerPayload: Object
+decisionAt: Date
+gatewayRefundId: String
+gatewayResponse: Mixed
 createdAt: Date
 updatedAt: Date
 ```
@@ -366,19 +375,19 @@ updatedAt: Date
 ```text
 refunds.paymentId -> payments._id
 refunds.appointmentId -> appointments._id
-refunds.requestedBy -> users._id
-refunds.reviewedBy -> users._id
+refunds.patientId -> patients._id
+refunds.approvedBy -> users._id
+refunds.rejectedBy -> users._id
 ```
 
 ### Indexes
 
 ```text
-paymentId
 appointmentId
-requestedBy
-reviewedBy sparse
-razorpayRefundId: unique sparse
-status
+paymentId
+patientId
+gatewayRefundId: unique sparse
+refundStatus
 createdAt
 ```
 

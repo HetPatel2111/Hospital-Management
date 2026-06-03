@@ -16,6 +16,9 @@ import PatientDashboard from "../features/patient/PatientDashboard.jsx";
 import PatientProfile from "../features/patient/PatientProfile.jsx";
 import PatientAppointments from "../features/patient/PatientAppointments.jsx";
 import DoctorDetail from "../features/patient/DoctorDetail.jsx";
+import PatientPayments from "../features/patient/PatientPayments.jsx";
+import PatientRefunds from "../features/patient/PatientRefunds.jsx";
+import AdminRefunds from "../features/admin/AdminRefunds.jsx";
 
 // General Placeholder Component for Dashboard pages (to avoid creating final pages in this phase)
 const DashboardPlaceholder = ({ title, description }) => (
@@ -65,8 +68,8 @@ export default function AppRoutes() {
             <Route path={ROUTES.PATIENT_APPOINTMENTS} element={<PatientAppointments />} />
             <Route path={ROUTES.PATIENT_DOCTOR_DETAILS} element={<DoctorDetail />} />
             <Route path={ROUTES.PATIENT_RECORDS} element={<DashboardPlaceholder title="Patient Medical Records" description="List all prescriptions, laboratory test results, and notes assigned by doctors." />} />
-            <Route path={ROUTES.PATIENT_PAYMENTS} element={<DashboardPlaceholder title="Patient Payments Log" description="Review invoices, pending transaction amounts, and complete payments." />} />
-            <Route path={ROUTES.PATIENT_REFUNDS} element={<DashboardPlaceholder title="Patient Refunds Log" description="Check current status of payment returns and claim cancellations." />} />
+            <Route path={ROUTES.PATIENT_PAYMENTS} element={<PatientPayments />} />
+            <Route path={ROUTES.PATIENT_REFUNDS} element={<PatientRefunds />} />
           </Route>
         </Route>
 
@@ -90,7 +93,7 @@ export default function AppRoutes() {
             <Route path={ROUTES.ADMIN_DOCTORS} element={<DashboardPlaceholder title="Doctor Registration Approvals" description="Review certificates, approve new practitioner requests, and list registered doctors." />} />
             <Route path={ROUTES.ADMIN_APPOINTMENTS} element={<DashboardPlaceholder title="All Appointments Ledger" description="Monitor scheduling distributions, force cancellations, or change statuses." />} />
             <Route path={ROUTES.ADMIN_PAYMENTS} element={<DashboardPlaceholder title="All Payments Ledger" description="Track transactions, view total revenue collections, and manage billing entries." />} />
-            <Route path={ROUTES.ADMIN_REFUNDS} element={<DashboardPlaceholder title="Admin Refund Approvals" description="Process patient cancellation claims and trigger balance paybacks." />} />
+            <Route path={ROUTES.ADMIN_REFUNDS} element={<AdminRefunds />} />
             <Route path={ROUTES.ADMIN_AUDIT_LOGS} element={<DashboardPlaceholder title="Security Audit Logs" description="Review user session traces, database edits, and access histories." />} />
             <Route path={ROUTES.ADMIN_RAG} element={<DashboardPlaceholder title="AI RAG Knowledge Base" description="Upload document files to update the AI chatbot's vector dataset storage." />} />
           </Route>

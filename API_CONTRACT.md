@@ -92,8 +92,76 @@ PATCH  /appointments/:id/complete
 POST   /payments/create-order
 POST   /payments/verify
 GET    /payments/:id
-POST   /payments/webhook/razorpay
+GET    /payments/my-payments
+GET    /admin/payments
 ```
+
+### Payments APIs Details
+
+#### Create Order: `POST /payments/create-order`
+- **Request Body**:
+  ```json
+  { "appointmentId": "ObjectId" }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "keyId": "string",
+      "orderId": "string",
+      "amount": number,
+      "currency": "INR",
+      "paymentId": "ObjectId"
+    }
+  }
+  ```
+
+#### Verify Payment: `POST /payments/verify`
+- **Request Body**:
+  ```json
+  {
+    "appointmentId": "ObjectId",
+    "razorpayOrderId": "string",
+    "razorpayPaymentId": "string",
+    "razorpaySignature": "string",
+    "paymentMethod": "string (optional)",
+    "gatewayResponse": "object (optional)"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "success": true,
+      "paymentStatus": "success",
+      "appointmentStatus": "confirmed"
+    }
+  }
+  ```
+
+#### Payment Details: `GET /payments/:id`
+- **Response**: Returns the fully populated payment details, including appointment slot, patient credentials, and gateway response metadata.
+
+#### Patient Payments: `GET /payments/my-payments`
+- **Response**: Returns an array of transactions linked to the authenticated patient.
+
+#### Admin Payments: `GET /admin/payments`
+- **Query Params**: `page` (default 1), `limit` (default 10), `status` (pending|success|failed|refunded), `refundStatus` (none|requested|processing|refunded), `patientId`, `doctorId`
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": [ ... ],
+    "pagination": {
+      "total": number,
+      "page": number,
+      "limit": number,
+      "pages": number
+    }
+  }
+  ```
 
 Important payment rule:
 
@@ -102,13 +170,72 @@ The frontend must never be trusted as the source of truth for payment success. T
 ## Refund APIs
 
 ```text
-POST   /refunds
-GET    /refunds
-GET    /refunds/:id
-PATCH  /refunds/:id/approve
-PATCH  /refunds/:id/reject
-POST   /refunds/:id/process
+POST   /refunds/request
+GET    /refunds/my-refunds
+GET    /admin/refunds
+PATCH  /admin/refunds/:id/approve
+PATCH  /admin/refunds/:id/reject
+PATCH  /admin/refunds/:id/process
 ```
+
+### Refund API Details
+
+#### Request Refund: `POST /refunds/request`
+- **Access**: Patient (authenticated)
+- **Request Body**:
+  ```json
+  {
+    "appointmentId": "ObjectId",
+    "refundReason": "string (at least 5 characters)"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "_id": "ObjectId",
+      "appointmentId": "ObjectId",
+      "paymentId": "ObjectId",
+      "patientId": "ObjectId",
+      "amount": number,
+      "refundPercentage": number,
+      "refundAmount": number,
+      "refundReason": "string",
+      "refundStatus": "requested",
+      "requestedAt": "Date"
+    }
+  }
+  ```
+
+#### Get My Refunds: `GET /refunds/my-refunds`
+- **Access**: Patient (authenticated)
+- **Response**: Returns a list of all refunds requested by the current patient.
+
+#### Get All Refunds: `GET /admin/refunds`
+- **Access**: Admin (authenticated)
+- **Query Params**: `page` (default 1), `limit` (default 10), `status` (requested|approved|rejected|processing|refunded), `patientId`
+- **Response**: Returns paginated administrative refund requests review queue.
+
+#### Approve Refund: `PATCH /admin/refunds/:id/approve`
+- **Access**: Admin (authenticated)
+- **Request Body**:
+  ```json
+  { "adminRemarks": "string (optional)" }
+  ```
+- **Response**: Returns the approved refund record.
+
+#### Reject Refund: `PATCH /admin/refunds/:id/reject`
+- **Access**: Admin (authenticated)
+- **Request Body**:
+  ```json
+  { "adminRemarks": "string (required, at least 5 chars)" }
+  ```
+- **Response**: Returns the rejected refund record.
+
+#### Process Refund: `PATCH /admin/refunds/:id/process`
+- **Access**: Admin (authenticated)
+- **Response**: Triggers Razorpay refund via SDK, sets status to `refunded` on success, and logs transactions.
 
 ## Chatbot APIs
 

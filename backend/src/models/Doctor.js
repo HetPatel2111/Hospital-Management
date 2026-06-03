@@ -46,6 +46,14 @@ const availabilityExceptionSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    startTime: {
+      type: String,
+      trim: true
+    },
+    endTime: {
+      type: String,
+      trim: true
+    },
     reason: {
       type: String,
       trim: true

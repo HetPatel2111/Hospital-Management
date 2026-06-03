@@ -11,6 +11,8 @@ import patientRoutes from "./routes/patientRoutes.js";
 import appointmentRoutes from "./routes/appointmentRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
+import refundRoutes from "./routes/refundRoutes.js";
 
 const app = express();
 
@@ -53,6 +55,8 @@ app.use("/api/v1/admin/doctors", adminDoctorRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/appointments", appointmentRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
+app.use("/api/v1/payments", paymentRoutes);
+app.use("/api/v1/refunds", refundRoutes);
 
 app.use((req, res, next) => {
   next(new AppError("Route not found", 404, "ROUTE_NOT_FOUND"));

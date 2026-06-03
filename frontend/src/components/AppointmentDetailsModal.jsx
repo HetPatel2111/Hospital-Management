@@ -1,7 +1,7 @@
 import React from "react";
 import { THEME } from "../theme/index.js";
 
-export default function AppointmentDetailsModal({ appointment, onClose, onCancelClick, onRescheduleClick }) {
+export default function AppointmentDetailsModal({ appointment, onClose, onCancelClick, onRescheduleClick, onPayClick }) {
   if (!appointment) return null;
 
   const getStatusBadge = (status) => {
@@ -14,6 +14,10 @@ export default function AppointmentDetailsModal({ appointment, onClose, onCancel
         return "bg-red-500/10 text-red-400 border-red-500/20";
       case "refunded":
         return "bg-purple-500/10 text-purple-400 border-purple-500/20";
+      case "payment_completed":
+        return "bg-blue-500/10 text-blue-400 border-blue-500/20";
+      case "pending_payment":
+        return "bg-amber-500/10 text-amber-400 border-amber-500/20";
       case "pending":
       default:
         return "bg-amber-500/10 text-amber-400 border-amber-500/20";
@@ -38,7 +42,7 @@ export default function AppointmentDetailsModal({ appointment, onClose, onCancel
         <div className="flex items-center justify-between border-b border-white/5 pb-4 mb-6">
           <div className="flex items-center gap-3">
             <span className={`text-[10px] uppercase font-bold border px-2 py-0.5 rounded-full ${getStatusBadge(appointment.status)}`}>
-              {appointment.status}
+              {appointment.status?.replace("_", " ")}
             </span>
             <h3 className="font-bold text-slate-100 text-md">Appointment Details</h3>
           </div>
@@ -60,7 +64,7 @@ export default function AppointmentDetailsModal({ appointment, onClose, onCancel
               <div className="w-12 h-12 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center font-bold text-lg flex-shrink-0">
                 {appointment.doctor.fullName?.charAt(0).toUpperCase() || "D"}
               </div>
-              <div>
+              <div className="text-left">
                 <h4 className="text-sm font-semibold text-slate-100">{appointment.doctor.fullName}</h4>
                 <p className="text-xs text-sky-400">{appointment.doctor.specialization}</p>
                 <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-wider">{appointment.doctor.qualification?.join(", ")}</p>
@@ -82,6 +86,19 @@ export default function AppointmentDetailsModal({ appointment, onClose, onCancel
             </div>
           </div>
 
+          {/* Consultation Fee */}
+          {appointment.doctor && appointment.doctor.consultationFee && (
+            <div className="p-4 rounded-xl bg-white/5 border border-white/5 text-left flex justify-between items-center">
+              <div>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-0.5 block">Consultation Fee</span>
+                <p className="text-xs font-semibold text-slate-200">Doctor Professional Fee</p>
+              </div>
+              <div className="text-right">
+                <span className="text-sm font-extrabold text-sky-400">₹{appointment.doctor.consultationFee}</span>
+              </div>
+            </div>
+          )}
+
           {/* Reason */}
           <div className="p-4 rounded-xl bg-white/5 border border-white/5 text-left">
             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1 block">Patient Reason for Visit</span>
@@ -99,33 +116,49 @@ export default function AppointmentDetailsModal({ appointment, onClose, onCancel
           )}
         </div>
 
-        {/* Footer Actions (Only for pending / confirmed appointments) */}
-        {(appointment.status === "pending" || appointment.status === "confirmed") && (
-          <div className="flex gap-3 border-t border-white/5 pt-5 mt-6">
-            {onCancelClick && (
-              <button
-                onClick={() => {
-                  onCancelClick(appointment);
-                  onClose();
-                }}
-                className="flex-1 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 font-semibold rounded-xl text-xs tracking-wider uppercase transition-colors"
-              >
-                Cancel Appointment
-              </button>
-            )}
-            {onRescheduleClick && (
-              <button
-                onClick={() => {
-                  onRescheduleClick(appointment);
-                  onClose();
-                }}
-                className="flex-1 py-2.5 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 text-sky-400 font-semibold rounded-xl text-xs tracking-wider uppercase transition-colors"
-              >
-                Reschedule
-              </button>
-            )}
-          </div>
-        )}
+        {/* Footer Actions */}
+        <div className="flex flex-col gap-3 border-t border-white/5 pt-5 mt-6">
+          {appointment.status === "pending_payment" && onPayClick && (
+            <button
+              onClick={() => {
+                onPayClick(appointment);
+              }}
+              className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold rounded-xl text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
+              </svg>
+              Pay Now (₹{appointment.doctor?.consultationFee})
+            </button>
+          )}
+
+          {(appointment.status === "pending" || appointment.status === "confirmed" || appointment.status === "pending_payment") && (
+            <div className="flex gap-3 w-full">
+              {onCancelClick && (
+                <button
+                  onClick={() => {
+                    onCancelClick(appointment);
+                    onClose();
+                  }}
+                  className="flex-1 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 font-semibold rounded-xl text-xs tracking-wider uppercase transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+              {onRescheduleClick && (
+                <button
+                  onClick={() => {
+                    onRescheduleClick(appointment);
+                    onClose();
+                  }}
+                  className="flex-1 py-2.5 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 text-sky-400 font-semibold rounded-xl text-xs tracking-wider uppercase transition-colors"
+                >
+                  Reschedule
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

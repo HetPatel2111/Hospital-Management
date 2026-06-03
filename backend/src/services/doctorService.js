@@ -42,7 +42,33 @@ const toDoctorResponse = (doctor) => {
   };
 };
 
-const buildDoctorFilters = (query, includeOnlyApproved = true) => {
+const mapSearchToSpecializations = (searchStr) => {
+  if (!searchStr) return [];
+  const normalized = searchStr.toLowerCase().trim();
+  const matchedSpecs = [];
+  
+  const keywordMappings = {
+    "Cardiology": ["cardiology", "cardilogistic", "heart", "chest pain", "cardiac"],
+    "Dermatology": ["dermatology", "dermatologist", "skin", "acne", "rash"],
+    "Pediatrics": ["pediatrics", "pediatrician", "child", "kid", "baby"],
+    "Orthopedics": ["orthopedics", "orthopedic", "bone", "fracture", "joint"],
+    "General Medicine": ["general medicine", "cold", "fever", "cough", "headache", "flu", "general"],
+    "Neurology": ["neurology", "neurologist", "brain", "nerve"],
+    "Oncology": ["oncology", "oncologist", "cancer", "tumor"],
+    "Gynecology": ["gynecology", "gynecologist", "women", "pregnancy", "female"],
+    "Psychiatry": ["psychiatry", "psychiatrist", "mental", "depression", "anxiety"],
+    "Radiology": ["radiology", "radiologist", "xray", "scan"]
+  };
+
+  for (const [spec, keywords] of Object.entries(keywordMappings)) {
+    if (keywords.some(kw => normalized.includes(kw) || kw.includes(normalized))) {
+      matchedSpecs.push(spec);
+    }
+  }
+  return matchedSpecs;
+};
+
+const buildDoctorFilters = async (query, includeOnlyApproved = true) => {
   const filters = {};
 
   if (includeOnlyApproved) {
@@ -66,12 +92,29 @@ const buildDoctorFilters = (query, includeOnlyApproved = true) => {
   }
 
   if (query.search) {
-    filters.$or = [
+    const orFilters = [
       { specialization: { $regex: query.search, $options: "i" } },
       { qualification: { $elemMatch: { $regex: query.search, $options: "i" } } },
       { bio: { $regex: query.search, $options: "i" } },
       { registrationNumber: { $regex: query.search, $options: "i" } }
     ];
+
+    // Name search: find doctor user names
+    const matchingUsers = await User.find({
+      name: { $regex: query.search, $options: "i" },
+      role: "doctor"
+    }).select("_id");
+    if (matchingUsers.length > 0) {
+      orFilters.push({ userId: { $in: matchingUsers.map(u => u._id) } });
+    }
+
+    // Specialization keyword mapping
+    const matchedSpecs = mapSearchToSpecializations(query.search);
+    if (matchedSpecs.length > 0) {
+      orFilters.push({ specialization: { $in: matchedSpecs } });
+    }
+
+    filters.$or = orFilters;
   }
 
   return filters;
@@ -88,7 +131,7 @@ const getDoctorByIdOrThrow = async (id) => {
 };
 
 export const listDoctors = async (query, actor = null) => {
-  const filters = buildDoctorFilters(query, true);
+  const filters = await buildDoctorFilters(query, true);
   const skip = (query.page - 1) * query.limit;
   const sort = { [query.sortBy]: query.sortOrder === "asc" ? 1 : -1 };
 
@@ -610,16 +653,20 @@ export const getDoctorAvailabilityForDate = async (doctorId, dateStr) => {
   }
 
   const date = new Date(dateStr);
-  const appointmentDay = date.getDay();
+  const appointmentDay = date.getUTCDay();
   const appointmentDateStr = date.toISOString().split("T")[0];
 
   // 1. Check Exceptions first
-  const exception = doctor.availability?.exceptions?.find((e) => {
+  const dayExceptions = doctor.availability?.exceptions?.filter((e) => {
     const exceptionDateStr = new Date(e.date).toISOString().split("T")[0];
     return exceptionDateStr === appointmentDateStr;
-  });
+  }) || [];
 
-  if (exception && !exception.isAvailable) {
+  const isFullDayBlocked = dayExceptions.some(
+    (e) => !e.isAvailable && !e.startTime && !e.endTime
+  );
+
+  if (isFullDayBlocked) {
     return { slots: [] };
   }
 
@@ -636,8 +683,13 @@ export const getDoctorAvailabilityForDate = async (doctorId, dateStr) => {
   const bookings = await Appointment.find({
     doctorId: doctor._id,
     appointmentDate: date,
-    status: { $in: ["pending", "confirmed", "completed"] }
+    status: { $in: ["pending_payment", "pending", "confirmed", "completed"] }
   });
+
+  // Enforce 15 patient daily booking limit
+  if (bookings.length >= 15) {
+    return { slots: [] };
+  }
 
   // 4. Map weekly schedule slots and check overlaps
   const slots = daySchedule.slots.map((slot) => {
@@ -645,10 +697,17 @@ export const getDoctorAvailabilityForDate = async (doctorId, dateStr) => {
       (booking) => slot.startTime < booking.endTime && slot.endTime > booking.startTime
     );
 
+    const isBlockedByException = dayExceptions.some((e) => {
+      if (!e.isAvailable && e.startTime && e.endTime) {
+        return slot.startTime < e.endTime && slot.endTime > e.startTime;
+      }
+      return false;
+    });
+
     return {
       startTime: slot.startTime,
       endTime: slot.endTime,
-      available: !isBooked
+      available: !isBooked && !isBlockedByException
     };
   });
 

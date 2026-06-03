@@ -50,23 +50,40 @@ const toAppointmentResponse = (appointment) => {
 };
 
 const checkDoctorAvailability = (doctor, date, startTime, endTime) => {
-  const appointmentDay = new Date(date).getDay(); // 0 is Sunday, 6 is Saturday
+  const appointmentDay = new Date(date).getUTCDay(); // 0 is Sunday, 6 is Saturday
   const appointmentDateStr = new Date(date).toISOString().split("T")[0];
 
   // 1. Check exceptions
-  const exception = doctor.availability?.exceptions?.find((e) => {
+  const dayExceptions = doctor.availability?.exceptions?.filter((e) => {
     const exceptionDateStr = new Date(e.date).toISOString().split("T")[0];
     return exceptionDateStr === appointmentDateStr;
-  });
+  }) || [];
 
-  if (exception) {
-    if (!exception.isAvailable) {
-      throw new AppError(
-        `Doctor is not available on this date: ${exception.reason || "Slot blocked"}`,
-        400,
-        "DOCTOR_UNAVAILABLE_EXCEPTION"
-      );
+  // Check full day block exception
+  const fullDayException = dayExceptions.find(
+    (e) => !e.isAvailable && !e.startTime && !e.endTime
+  );
+  if (fullDayException) {
+    throw new AppError(
+      `Doctor is not available on this date: ${fullDayException.reason || "Slot blocked"}`,
+      400,
+      "DOCTOR_UNAVAILABLE_EXCEPTION"
+    );
+  }
+
+  // Check slot-specific block exception
+  const slotException = dayExceptions.find((e) => {
+    if (!e.isAvailable && e.startTime && e.endTime) {
+      return startTime < e.endTime && endTime > e.startTime;
     }
+    return false;
+  });
+  if (slotException) {
+    throw new AppError(
+      `Doctor is not available during requested hours: ${slotException.reason || "Slot blocked"}`,
+      400,
+      "DOCTOR_UNAVAILABLE_EXCEPTION"
+    );
   }
 
   // 2. Check weekly schedule
@@ -92,7 +109,7 @@ const checkDoubleBooking = async (doctorId, date, startTime, endTime, excludeApp
   const query = {
     doctorId,
     appointmentDate: new Date(date),
-    status: { $in: ["pending", "confirmed"] },
+    status: { $in: ["pending_payment", "pending", "confirmed"] },
     startTime: { $lt: endTime },
     endTime: { $gt: startTime }
   };
@@ -118,6 +135,16 @@ export const createAppointment = async (patientUserId, payload) => {
     throw new AppError("Doctor not found or not approved", 404, "DOCTOR_NOT_FOUND");
   }
 
+  const bookingsCount = await Appointment.countDocuments({
+    doctorId: doctor._id,
+    appointmentDate: new Date(payload.appointmentDate),
+    status: { $in: ["pending_payment", "pending", "confirmed", "completed"] }
+  });
+
+  if (bookingsCount >= 15) {
+    throw new AppError("Doctor has reached the maximum booking limit of 15 patients for this date", 400, "MAX_BOOKING_LIMIT_REACHED");
+  }
+
   checkDoctorAvailability(doctor, payload.appointmentDate, payload.startTime, payload.endTime);
   await checkDoubleBooking(doctor._id, payload.appointmentDate, payload.startTime, payload.endTime);
 
@@ -128,7 +155,7 @@ export const createAppointment = async (patientUserId, payload) => {
     startTime: payload.startTime,
     endTime: payload.endTime,
     reason: payload.reason,
-    status: "pending"
+    status: "pending_payment"
   });
 
   if (doctor.userId?._id) {
@@ -237,11 +264,22 @@ export const rescheduleAppointment = async (appointmentId, actor, payload) => {
     throw new AppError("You do not have permission to reschedule this appointment", 403, "FORBIDDEN");
   }
 
-  if (!["pending", "confirmed"].includes(appointment.status)) {
+  if (!["pending_payment", "pending", "confirmed"].includes(appointment.status)) {
     throw new AppError("Only pending or confirmed appointments can be rescheduled", 400, "INVALID_STATUS");
   }
 
   const doctor = appointment.doctorId;
+  const bookingsCount = await Appointment.countDocuments({
+    doctorId: doctor._id,
+    appointmentDate: new Date(payload.appointmentDate),
+    status: { $in: ["pending_payment", "pending", "confirmed", "completed"] },
+    _id: { $ne: appointment._id }
+  });
+
+  if (bookingsCount >= 15) {
+    throw new AppError("Doctor has reached the maximum booking limit of 15 patients for this date", 400, "MAX_BOOKING_LIMIT_REACHED");
+  }
+
   checkDoctorAvailability(doctor, payload.appointmentDate, payload.startTime, payload.endTime);
   await checkDoubleBooking(doctor._id, payload.appointmentDate, payload.startTime, payload.endTime, appointment._id);
 

@@ -4,11 +4,71 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getAppointments, getMyProfile } from "../../services/patientService.js";
 import { getDoctors, getDoctorAvailability } from "../../services/doctorService.js";
 import { createAppointment, cancelAppointment, rescheduleAppointment } from "../../services/appointmentService.js";
+import { createPaymentOrder, verifyPayment } from "../../services/paymentService.js";
+import { requestRefund as requestPatientRefund } from "../../services/refundService.js";
 import { ListItemSkeleton } from "../../components/Skeletons.jsx";
 import EmptyState from "../../components/EmptyState.jsx";
 import AppointmentDetailsModal from "../../components/AppointmentDetailsModal.jsx";
+import RefundRequestModal from "../../components/RefundRequestModal.jsx";
 import { THEME } from "../../theme/index.js";
 import { ROUTES } from "../../constants/routes.js";
+
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
+
+const getNext7Days = (doctor) => {
+  const days = [];
+  const today = new Date();
+  
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const dateVal = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${dateVal}`;
+    const dayOfWeek = new Date(dateStr).getUTCDay();
+    
+    const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
+    const dayNum = d.toLocaleDateString("en-US", { day: "2-digit" });
+    
+    let isAvailable = true;
+    if (doctor?.availability?.weeklySchedule) {
+      const weekSched = doctor.availability.weeklySchedule.find(w => w.dayOfWeek === dayOfWeek);
+      isAvailable = !!(weekSched && weekSched.isAvailable && weekSched.slots?.length > 0);
+      
+      if (isAvailable && doctor?.availability?.exceptions) {
+        const exception = doctor.availability.exceptions.find(e => {
+          const exceptionDateStr = new Date(e.date).toISOString().split("T")[0];
+          return exceptionDateStr === dateStr;
+        });
+        if (exception && !exception.isAvailable && !exception.startTime && !exception.endTime) {
+          isAvailable = false;
+        }
+      }
+    }
+    
+    days.push({
+      dateStr,
+      dayName,
+      dayNum,
+      isAvailable
+    });
+  }
+  return days;
+};
 
 export default function PatientAppointments() {
   const queryClient = useQueryClient();
@@ -34,6 +94,132 @@ export default function PatientAppointments() {
   const [bookReason, setBookReason] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const [bookingError, setBookingError] = useState("");
+
+  // Payment integration states
+  const [paymentError, setPaymentError] = useState("");
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [successToast, setSuccessToast] = useState(null);
+
+  // Refund states & handlers
+  const [refundTargetAppt, setRefundTargetAppt] = useState(null);
+
+  const handleRefundSubmit = async (appointmentId, reason) => {
+    try {
+      setIsProcessingPayment(true);
+      await requestPatientRefund(appointmentId, reason);
+      
+      queryClient.invalidateQueries(["patientAppointments"]);
+      queryClient.invalidateQueries(["patientDashboard"]);
+      queryClient.invalidateQueries(["patientRefunds"]);
+      setRefundTargetAppt(null);
+
+      setSuccessToast({
+        title: "Refund Requested",
+        message: "Your refund request was successfully submitted!"
+      });
+      setTimeout(() => setSuccessToast(null), 4000);
+    } catch (err) {
+      setPaymentError(err.response?.data?.message || "Failed to submit refund request.");
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  const getStatusBadgeClass = (status) => {
+    switch (status) {
+      case "confirmed":
+        return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+      case "completed":
+        return "bg-sky-500/10 text-sky-400 border-sky-500/20";
+      case "cancelled":
+        return "bg-red-500/10 text-red-400 border-red-500/20";
+      case "refunded":
+        return "bg-purple-500/10 text-purple-400 border-purple-500/20";
+      case "payment_completed":
+        return "bg-blue-500/10 text-blue-400 border-blue-500/20";
+      case "pending_payment":
+        return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+      case "pending":
+      default:
+        return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+    }
+  };
+
+  const handlePaymentFlow = async (appt) => {
+    setPaymentError("");
+    setIsProcessingPayment(true);
+    try {
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        setPaymentError("Failed to load Razorpay Payment Gateway. Check your network.");
+        setIsProcessingPayment(false);
+        return;
+      }
+
+      // Create order on backend
+      const orderRes = await createPaymentOrder(appt.id);
+      const orderData = orderRes.data;
+
+      const options = {
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "AI Hospital Management",
+        description: `Consultation Fee - Dr. ${appt.doctor?.fullName}`,
+        order_id: orderData.orderId,
+        prefill: {
+          name: profileData?.data?.patient?.userId?.name || "",
+          email: profileData?.data?.patient?.userId?.email || "",
+          contact: profileData?.data?.patient?.userId?.phone || ""
+        },
+        theme: {
+          color: "#0ea5e9"
+        },
+        handler: async function (response) {
+          setIsProcessingPayment(true);
+          try {
+            await verifyPayment({
+              appointmentId: appt.id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+              paymentMethod: "razorpay",
+              gatewayResponse: response
+            });
+
+            // Success state invalidations
+            queryClient.invalidateQueries(["patientAppointments"]);
+            queryClient.invalidateQueries(["patientDashboard"]);
+            queryClient.invalidateQueries(["patientPayments"]);
+            setSelectedAppointment(null);
+
+            setSuccessToast({
+              title: "Payment Confirmed",
+              message: "Your consultation has been booked and paid successfully!"
+            });
+
+            setTimeout(() => setSuccessToast(null), 4000);
+          } catch (err) {
+            setPaymentError(err.response?.data?.message || "Failed to verify transaction payment.");
+          } finally {
+            setIsProcessingPayment(false);
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setIsProcessingPayment(false);
+          }
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      console.error(err);
+      setPaymentError(err.response?.data?.message || "Could not initialize payment order.");
+      setIsProcessingPayment(false);
+    }
+  };
 
   // Get current patient profile to pass patient ID if needed
   const { data: profileData } = useQuery({
@@ -257,8 +443,8 @@ export default function PatientAppointments() {
                   <div className="text-left">
                     <h4 className="text-sm font-bold text-slate-100">{appt.doctor?.fullName}</h4>
                     <p className="text-xs text-sky-400 font-medium">{appt.doctor?.specialization}</p>
-                    <span className="inline-block mt-2 text-[9px] font-bold border border-amber-500/20 bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full uppercase">
-                      {appt.status}
+                    <span className={`inline-block mt-2 text-[9px] font-bold border px-2 py-0.5 rounded-full uppercase ${getStatusBadgeClass(appt.status)}`}>
+                      {appt.status?.replace("_", " ")}
                     </span>
                   </div>
                 </div>
@@ -314,12 +500,8 @@ export default function PatientAppointments() {
                   <div className="text-left">
                     <h4 className="text-sm font-bold text-slate-200">{appt.doctor?.fullName}</h4>
                     <p className="text-xs text-slate-500">{appt.doctor?.specialization}</p>
-                    <span className={`inline-block mt-2 text-[9px] font-bold border px-2 py-0.5 rounded-full uppercase ${
-                      appt.status === "completed" 
-                        ? "bg-sky-500/10 text-sky-400 border-sky-500/20" 
-                        : "bg-red-500/10 text-red-400 border-red-500/20"
-                    }`}>
-                      {appt.status}
+                    <span className={`inline-block mt-2 text-[9px] font-bold border px-2 py-0.5 rounded-full uppercase ${getStatusBadgeClass(appt.status)}`}>
+                      {appt.status?.replace("_", " ")}
                     </span>
                   </div>
                 </div>
@@ -331,9 +513,22 @@ export default function PatientAppointments() {
                   <p className="text-[10px] text-slate-500 mt-1">{appt.startTime} - {appt.endTime}</p>
                 </div>
 
-                <button className="w-full md:w-auto text-xs font-semibold px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-300">
-                  Inspect File
-                </button>
+                <div className="flex gap-2 w-full md:w-auto" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => setSelectedAppointment(appt)}
+                    className="flex-1 md:flex-none text-xs font-semibold px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 transition-colors"
+                  >
+                    Inspect Details
+                  </button>
+                  {appt.status === "cancelled" && appt.paymentId && (
+                    <button
+                      onClick={() => setRefundTargetAppt(appt)}
+                      className="flex-1 md:flex-none text-xs font-semibold px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                    >
+                      Request Refund
+                    </button>
+                  )}
+                </div>
               </div>
             ))
           )}
@@ -346,7 +541,7 @@ export default function PatientAppointments() {
           <div className="flex flex-col sm:flex-row gap-4">
             <input
               type="text"
-              placeholder="Search doctors by name..."
+              placeholder="Search by name, specialization, or issue (e.g., cardilogistic)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={`flex-1 px-4 py-3 text-sm ${THEME.glass.input}`}
@@ -423,7 +618,48 @@ export default function PatientAppointments() {
           onClose={() => setSelectedAppointment(null)}
           onCancelClick={(appt) => setCancellingAppt(appt)}
           onRescheduleClick={(appt) => setReschedulingAppt(appt)}
+          onPayClick={handlePaymentFlow}
         />
+      )}
+
+      {/* PROCESSING PAYMENT OVERLAY */}
+      {isProcessingPayment && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-sky-500 mb-4"></div>
+          <p className="text-sm font-semibold text-slate-200">Verifying Payment Security...</p>
+          <p className="text-xs text-slate-400 mt-1">Please do not close this window or navigate away.</p>
+        </div>
+      )}
+
+      {/* SUCCESS TOAST OVERLAY */}
+      {successToast && (
+        <div className="fixed bottom-5 right-5 z-50 animate-bounce">
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-500 text-white font-medium shadow-2xl">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 flex-shrink-0">
+              <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" />
+            </svg>
+            <div className="text-left">
+              <p className="text-xs font-bold uppercase tracking-wider">{successToast.title}</p>
+              <p className="text-[10px] text-white/90 mt-0.5">{successToast.message}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PAYMENT ERROR TOAST OVERLAY */}
+      {paymentError && (
+        <div className="fixed bottom-5 left-5 z-50">
+          <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/90 text-white font-medium shadow-2xl max-w-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 flex-shrink-0">
+              <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+            </svg>
+            <div className="text-left flex-1">
+              <p className="text-xs font-bold uppercase tracking-wider">Payment Error</p>
+              <p className="text-[10px] text-white/90 mt-0.5">{paymentError}</p>
+            </div>
+            <button onClick={() => setPaymentError("")} className="text-white hover:text-white/80 font-bold p-1">×</button>
+          </div>
+        </div>
       )}
 
       {/* MODAL 2: Reschedule Appointment Modal */}
@@ -443,6 +679,35 @@ export default function PatientAppointments() {
             <form onSubmit={handleRescheduleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Select Date</label>
+                
+                {/* 7-Day Quick Selector */}
+                <div className="flex gap-2 overflow-x-auto pb-2 mb-3 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                  {getNext7Days(
+                    doctorsList.find(d => d._id === (reschedulingAppt?.doctor?.id || reschedulingAppt?.doctorId)) || reschedulingAppt?.doctor
+                  ).map((day, idx) => {
+                    const isSelected = bookDate === day.dateStr;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setBookDate(day.dateStr);
+                          setBookSlot(null);
+                        }}
+                        className={`flex-shrink-0 flex flex-col items-center justify-center w-14 py-2 rounded-xl border transition-all ${
+                          isSelected
+                            ? "bg-sky-500 text-white border-sky-500 shadow shadow-sky-500/20"
+                            : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
+                        }`}
+                      >
+                        <span className="text-[10px] uppercase font-semibold opacity-70">{day.dayName}</span>
+                        <span className="text-sm font-bold my-0.5">{day.dayNum}</span>
+                        <span className={`w-1.5 h-1.5 rounded-full mt-1 ${day.isAvailable ? "bg-emerald-400" : "bg-slate-600 opacity-40"}`} title={day.isAvailable ? "Available" : "No hours schedule"} />
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <input
                   type="date"
                   value={bookDate}
@@ -461,24 +726,58 @@ export default function PatientAppointments() {
                   ) : slotsList.length === 0 ? (
                     <p className="text-xs text-red-400">Doctor has no available slots for this date.</p>
                   ) : (
-                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1 bg-slate-950/40 rounded-xl border border-white/5">
-                      {slotsList.map((slot, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          disabled={!slot.available}
-                          onClick={() => setBookSlot({ startTime: slot.startTime, endTime: slot.endTime })}
-                          className={`p-2 text-xs rounded-lg font-medium border transition-all ${
-                            !slot.available
-                              ? "opacity-30 cursor-not-allowed bg-transparent border-transparent text-slate-500"
-                              : bookSlot?.startTime === slot.startTime
-                                ? "bg-sky-500 text-white border-sky-500 shadow shadow-sky-500/20"
-                                : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
-                          }`}
-                        >
-                          {slot.startTime}
-                        </button>
-                      ))}
+                    <div className="space-y-4 max-h-56 overflow-y-auto p-1">
+                      {/* Morning Shift */}
+                      {slotsList.some(s => s.startTime < "13:00") && (
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Morning Shift (10:00 AM - 1:00 PM)</span>
+                          <div className="grid grid-cols-2 gap-2">
+                            {slotsList.filter(s => s.startTime < "13:00").map((slot, idx) => (
+                              <button
+                                key={`resched-morning-${idx}`}
+                                type="button"
+                                disabled={!slot.available}
+                                onClick={() => setBookSlot({ startTime: slot.startTime, endTime: slot.endTime })}
+                                className={`p-2 text-xs rounded-lg font-medium border transition-all ${
+                                  !slot.available
+                                    ? "opacity-30 cursor-not-allowed bg-transparent border-transparent text-slate-500"
+                                    : bookSlot?.startTime === slot.startTime
+                                      ? "bg-sky-500 text-white border-sky-500 shadow shadow-sky-500/20"
+                                      : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
+                                }`}
+                              >
+                                {slot.startTime}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Afternoon / Evening Shift */}
+                      {slotsList.some(s => s.startTime >= "13:00") && (
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Afternoon / Evening Shift (2:00 PM - 6:00 PM)</span>
+                          <div className="grid grid-cols-2 gap-2">
+                            {slotsList.filter(s => s.startTime >= "13:00").map((slot, idx) => (
+                              <button
+                                key={`resched-afternoon-${idx}`}
+                                type="button"
+                                disabled={!slot.available}
+                                onClick={() => setBookSlot({ startTime: slot.startTime, endTime: slot.endTime })}
+                                className={`p-2 text-xs rounded-lg font-medium border transition-all ${
+                                  !slot.available
+                                    ? "opacity-30 cursor-not-allowed bg-transparent border-transparent text-slate-500"
+                                    : bookSlot?.startTime === slot.startTime
+                                      ? "bg-sky-500 text-white border-sky-500 shadow shadow-sky-500/20"
+                                      : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
+                                }`}
+                              >
+                                {slot.startTime}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -563,6 +862,33 @@ export default function PatientAppointments() {
             <form onSubmit={handleBookSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Select Visit Date</label>
+                
+                {/* 7-Day Quick Selector */}
+                <div className="flex gap-2 overflow-x-auto pb-2 mb-3 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                  {getNext7Days(bookingDoctor).map((day, idx) => {
+                    const isSelected = bookDate === day.dateStr;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setBookDate(day.dateStr);
+                          setBookSlot(null);
+                        }}
+                        className={`flex-shrink-0 flex flex-col items-center justify-center w-14 py-2 rounded-xl border transition-all ${
+                          isSelected
+                            ? "bg-sky-500 text-white border-sky-500 shadow shadow-sky-500/20"
+                            : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
+                        }`}
+                      >
+                        <span className="text-[10px] uppercase font-semibold opacity-70">{day.dayName}</span>
+                        <span className="text-sm font-bold my-0.5">{day.dayNum}</span>
+                        <span className={`w-1.5 h-1.5 rounded-full mt-1 ${day.isAvailable ? "bg-emerald-400" : "bg-slate-600 opacity-40"}`} title={day.isAvailable ? "Available" : "No hours schedule"} />
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <input
                   type="date"
                   value={bookDate}
@@ -581,24 +907,58 @@ export default function PatientAppointments() {
                   ) : slotsList.length === 0 ? (
                     <p className="text-xs text-red-400 text-left">Doctor has no available slots for this date.</p>
                   ) : (
-                    <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto p-1 bg-slate-950/40 rounded-xl border border-white/5">
-                      {slotsList.map((slot, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          disabled={!slot.available}
-                          onClick={() => setBookSlot({ startTime: slot.startTime, endTime: slot.endTime })}
-                          className={`p-2 text-[10px] rounded-lg font-semibold border transition-all ${
-                            !slot.available
-                              ? "opacity-30 cursor-not-allowed bg-transparent border-transparent text-slate-500"
-                              : bookSlot?.startTime === slot.startTime
-                                ? "bg-sky-500 text-white border-sky-500 shadow shadow-sky-500/20"
-                                : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
-                          }`}
-                        >
-                          {slot.startTime}
-                        </button>
-                      ))}
+                    <div className="space-y-4 max-h-56 overflow-y-auto p-1">
+                      {/* Morning Shift */}
+                      {slotsList.some(s => s.startTime < "13:00") && (
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Morning Shift (10:00 AM - 1:00 PM)</span>
+                          <div className="grid grid-cols-3 gap-2">
+                            {slotsList.filter(s => s.startTime < "13:00").map((slot, idx) => (
+                              <button
+                                key={`morning-${idx}`}
+                                type="button"
+                                disabled={!slot.available}
+                                onClick={() => setBookSlot({ startTime: slot.startTime, endTime: slot.endTime })}
+                                className={`p-2 text-[10px] rounded-lg font-semibold border transition-all ${
+                                  !slot.available
+                                    ? "opacity-30 cursor-not-allowed bg-transparent border-transparent text-slate-500"
+                                    : bookSlot?.startTime === slot.startTime
+                                      ? "bg-sky-500 text-white border-sky-500 shadow shadow-sky-500/20"
+                                      : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
+                                }`}
+                              >
+                                {slot.startTime}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Afternoon / Evening Shift */}
+                      {slotsList.some(s => s.startTime >= "13:00") && (
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Afternoon / Evening Shift (2:00 PM - 6:00 PM)</span>
+                          <div className="grid grid-cols-3 gap-2">
+                            {slotsList.filter(s => s.startTime >= "13:00").map((slot, idx) => (
+                              <button
+                                key={`afternoon-${idx}`}
+                                type="button"
+                                disabled={!slot.available}
+                                onClick={() => setBookSlot({ startTime: slot.startTime, endTime: slot.endTime })}
+                                className={`p-2 text-[10px] rounded-lg font-semibold border transition-all ${
+                                  !slot.available
+                                    ? "opacity-30 cursor-not-allowed bg-transparent border-transparent text-slate-500"
+                                    : bookSlot?.startTime === slot.startTime
+                                      ? "bg-sky-500 text-white border-sky-500 shadow shadow-sky-500/20"
+                                      : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
+                                }`}
+                              >
+                                {slot.startTime}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -635,6 +995,14 @@ export default function PatientAppointments() {
             </form>
           </div>
         </div>
+      )}
+      {/* MODAL 5: Refund Request Modal */}
+      {refundTargetAppt && (
+        <RefundRequestModal
+          appointment={refundTargetAppt}
+          onClose={() => setRefundTargetAppt(null)}
+          onSubmit={handleRefundSubmit}
+        />
       )}
     </div>
   );
