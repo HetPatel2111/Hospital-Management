@@ -16,7 +16,12 @@ export default function AdminAppointments() {
   // Fetch appointments query
   const { data, isLoading, error } = useQuery({
     queryKey: ["adminAppointments", { page: currentPage, search: searchQuery, status: statusFilter }],
-    queryFn: () => listAllAppointments({ page: currentPage, limit: 8, search: searchQuery, status: statusFilter })
+    queryFn: () => {
+      const params = { page: currentPage, limit: 8 };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter) params.status = statusFilter;
+      return listAllAppointments(params);
+    }
   });
 
   const appointmentsList = data?.data?.appointments || [];

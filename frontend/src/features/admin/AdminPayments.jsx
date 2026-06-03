@@ -12,7 +12,11 @@ export default function AdminPayments() {
   // Fetch payments list query
   const { data: paymentsData, isLoading: paymentsLoading, error: paymentsError } = useQuery({
     queryKey: ["adminPayments", { page: currentPage, status: statusFilter }],
-    queryFn: () => getAllPayments({ page: currentPage, limit: 8, status: statusFilter })
+    queryFn: () => {
+      const params = { page: currentPage, limit: 8 };
+      if (statusFilter) params.status = statusFilter;
+      return getAllPayments(params);
+    }
   });
 
   // Fetch KPIs for revenue summary cards

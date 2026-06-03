@@ -22,7 +22,12 @@ export default function AdminDoctors() {
   // Fetch doctors query
   const { data, isLoading, error } = useQuery({
     queryKey: ["adminDoctors", { page: currentPage, search: searchQuery, status: statusFilter }],
-    queryFn: () => listDoctorsAdmin({ page: currentPage, limit: 8, search: searchQuery, status: statusFilter })
+    queryFn: () => {
+      const params = { page: currentPage, limit: 8 };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter) params.status = statusFilter;
+      return listDoctorsAdmin(params);
+    }
   });
 
   const doctorsList = data?.data?.doctors || [];

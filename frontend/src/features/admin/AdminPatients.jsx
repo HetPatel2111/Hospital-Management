@@ -20,7 +20,11 @@ export default function AdminPatients() {
   // Fetch patients query
   const { data, isLoading, error } = useQuery({
     queryKey: ["adminPatients", { page: currentPage, search: searchQuery }],
-    queryFn: () => listPatients({ page: currentPage, limit: 8, search: searchQuery })
+    queryFn: () => {
+      const params = { page: currentPage, limit: 8 };
+      if (searchQuery) params.search = searchQuery;
+      return listPatients(params);
+    }
   });
 
   const patientsList = data?.data?.patients || [];

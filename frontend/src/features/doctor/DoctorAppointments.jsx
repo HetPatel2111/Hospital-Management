@@ -30,7 +30,13 @@ export default function DoctorAppointments() {
   // Fetch appointments query
   const { data, isLoading, error } = useQuery({
     queryKey: ["doctorAppointments", { page: currentPage, status: statusFilter }],
-    queryFn: () => getMyAppointments({ page: currentPage, limit: 8, status: statusFilter })
+    queryFn: () => {
+      const params = { page: currentPage, limit: 8 };
+      if (statusFilter) {
+        params.status = statusFilter;
+      }
+      return getMyAppointments(params);
+    }
   });
 
   const appointmentsList = data?.data?.appointments || [];
